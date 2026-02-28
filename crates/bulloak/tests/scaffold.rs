@@ -7,10 +7,15 @@ use pretty_assertions::assert_eq;
 
 mod common;
 
-/// Ensures behaviour is kept consistent across all the different backends, by running the same
-/// assertion closure on the result of both. The closure's second parameter is filled with the
-/// contents of the corresponding expected output file(if available), to account for the
-/// differences in output of every backend
+fn normalize_newlines(input: &str) -> String {
+    input.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Ensures behaviour is kept consistent across all the different backends, by
+/// running the same assertion closure on the result of both. The closure's
+/// second parameter is filled with the contents of the corresponding expected
+/// output file(if available), to account for the differences in output of every
+/// backend
 fn assert_on_all_parsers(
     treefile: &str,
     extra_args: &[&str],
@@ -39,7 +44,6 @@ fn assert_on_all_parsers(
     assertor(noir_output, expected_noir);
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn scaffolds_trees() {
     let trees = [
@@ -59,15 +63,16 @@ fn scaffolds_trees() {
     for tree_name in trees {
         assert_on_all_parsers(tree_name, &[], |output, expected| {
             let actual = String::from_utf8(output.stdout).unwrap();
+            let actual = normalize_newlines(&actual);
+            let expected = normalize_newlines(&expected.unwrap());
             // We trim here because we don't care about ending newlines.
-            assert_eq!(expected.unwrap().trim(), actual.trim());
+            assert_eq!(expected.trim(), actual.trim());
             assert_eq!(output.status.code().unwrap(), 0);
             assert!(output.stderr.is_empty());
         });
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn scaffolds_trees_with_vm_skip() {
     let cwd = env::current_dir().unwrap();
@@ -84,7 +89,8 @@ fn scaffolds_trees_with_vm_skip() {
     for tree_name in trees {
         let tree_path = tests_path.join(tree_name);
         let output = cmd(&binary_path, "scaffold", &tree_path, &args);
-        let actual = String::from_utf8(output.stdout).unwrap();
+        let actual =
+            normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
         let mut trimmed_extension = tree_path.clone();
         trimmed_extension.set_extension("");
@@ -95,14 +101,14 @@ fn scaffolds_trees_with_vm_skip() {
         let mut output_file: std::path::PathBuf = output_file_str.into();
         output_file.set_extension("t.sol");
 
-        let expected = fs::read_to_string(output_file).unwrap();
+        let expected =
+            normalize_newlines(&fs::read_to_string(output_file).unwrap());
 
         // We trim here because we don't care about ending newlines.
         assert_eq!(expected.trim(), actual.trim());
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn scaffolds_trees_with_format_descriptions() {
     let cwd = env::current_dir().unwrap();
@@ -114,7 +120,8 @@ fn scaffolds_trees_with_format_descriptions() {
     for tree_name in trees {
         let tree_path = tests_path.join(tree_name);
         let output = cmd(&binary_path, "scaffold", &tree_path, &args);
-        let actual = String::from_utf8(output.stdout).unwrap();
+        let actual =
+            normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
         let mut trimmed_extension = tree_path.clone();
         trimmed_extension.set_extension("");
@@ -125,14 +132,14 @@ fn scaffolds_trees_with_format_descriptions() {
         let mut output_file: std::path::PathBuf = output_file_str.into();
         output_file.set_extension("t.sol");
 
-        let expected = fs::read_to_string(output_file).unwrap();
+        let expected =
+            normalize_newlines(&fs::read_to_string(output_file).unwrap());
 
         // We trim here because we don't care about ending newlines.
         assert_eq!(expected.trim(), actual.trim());
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn scaffolds_trees_with_skip_modifiers() {
     let cwd = env::current_dir().unwrap();
@@ -143,18 +150,19 @@ fn scaffolds_trees_with_skip_modifiers() {
     for tree_name in trees {
         let tree_path = tests_path.join(tree_name);
         let output = cmd(&binary_path, "scaffold", &tree_path, &["-m"]);
-        let actual = String::from_utf8(output.stdout).unwrap();
+        let actual =
+            normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
         let mut output_file = tree_path.clone();
         output_file.set_extension("t.sol");
-        let expected = fs::read_to_string(output_file).unwrap();
+        let expected =
+            normalize_newlines(&fs::read_to_string(output_file).unwrap());
 
         // We trim here because we don't care about ending newlines.
         assert_eq!(expected.trim(), actual.trim());
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn skips_trees_when_file_exists() {
     let trees = [
@@ -173,7 +181,6 @@ fn skips_trees_when_file_exists() {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn errors_when_tree_is_empty() {
     assert_on_all_parsers("empty.tree", &[], |output, _| {
@@ -200,7 +207,6 @@ fn errors_when_condition_appears_multiple_times() {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn errors_when_root_contract_identifier_is_missing_multiple_roots() {
     let cwd = env::current_dir().unwrap();
@@ -217,7 +223,6 @@ fn errors_when_root_contract_identifier_is_missing_multiple_roots() {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn errors_when_root_contract_identifier_is_inconsistent_multiple_roots() {
     let cwd = env::current_dir().unwrap();
@@ -238,7 +243,24 @@ fn errors_when_root_contract_identifier_is_inconsistent_multiple_roots() {
     assert!(actual.contains("module name mismatch: expected 'ContractName', found 'OtherContractName'"));
 }
 
-#[cfg(not(target_os = "windows"))]
+#[test]
+fn errors_when_root_has_too_many_separators() {
+    let cwd = env::current_dir().unwrap();
+    let binary_path = get_binary_path();
+    let tree_path =
+        cwd.join("tests").join("scaffold").join("too_many_separators.tree");
+
+    let output = cmd(&binary_path, "scaffold", &tree_path, &[]);
+    let actual = String::from_utf8(output.stderr).unwrap();
+    assert!(actual.contains("too many separators at tree root #1"));
+
+    let output = cmd(&binary_path, "scaffold", &tree_path, &["-l", "noir"]);
+    let actual = String::from_utf8(output.stderr).unwrap();
+    assert!(actual.contains(
+        "invalid root \"ContractName::func1::extra\": expected at most one '::' separator"
+    ));
+}
+
 #[test]
 fn errors_when_only_one_file_errors_others_are_still_scaffolded() {
     let cwd = env::current_dir().unwrap();
@@ -329,7 +351,6 @@ fn scaffold_invalid_glob_warns_but_no_output() {
     );
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
 fn scaffold_dissambiguates_function_name_collisions() {
     let cwd = env::current_dir().unwrap();
@@ -340,11 +361,13 @@ fn scaffold_dissambiguates_function_name_collisions() {
     for tree_name in trees {
         let tree_path = tests_path.join(tree_name);
         let output = cmd(&binary_path, "scaffold", &tree_path, &[]);
-        let actual = String::from_utf8(output.stdout).unwrap();
+        let actual =
+            normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
         let mut output_file = tree_path.clone();
         output_file.set_extension("t.sol");
-        let expected = fs::read_to_string(output_file).unwrap();
+        let expected =
+            normalize_newlines(&fs::read_to_string(output_file).unwrap());
 
         // We trim here because we don't care about ending newlines.
         assert_eq!(expected.trim(), actual.trim());
@@ -352,7 +375,8 @@ fn scaffold_dissambiguates_function_name_collisions() {
 }
 
 /// Regression test for https://github.com/defi-wonderland/bulloak/pull/9#issuecomment-3710452952
-/// When multiple roots share the same condition, the hoisted setup hook should be generated.
+/// When multiple roots share the same condition, the hoisted setup hook should
+/// be generated.
 #[test]
 fn scaffold_noir_generates_hoisted_setup_hook_for_shared_condition() {
     let cwd = env::current_dir().unwrap();
@@ -361,7 +385,7 @@ fn scaffold_noir_generates_hoisted_setup_hook_for_shared_condition() {
     let tree_path = tests_path.join("hoisted_hook_regression.tree");
 
     let output = cmd(&binary_path, "scaffold", &tree_path, &["-l", "noir"]);
-    let actual = String::from_utf8(output.stdout).unwrap();
+    let actual = normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
     assert!(
         actual.contains("unconstrained fn when_passing_valid_parameters()"),
@@ -371,7 +395,8 @@ fn scaffold_noir_generates_hoisted_setup_hook_for_shared_condition() {
 
     // Also verify the full expected output matches
     let noir_filename = tests_path.join("hoisted_hook_regression_test.nr");
-    let expected = fs::read_to_string(noir_filename).unwrap();
+    let expected =
+        normalize_newlines(&fs::read_to_string(noir_filename).unwrap());
     assert_eq!(expected.trim(), actual.trim());
 }
 
@@ -384,10 +409,11 @@ fn scaffold_noir_generates_skips_modifiers_on_imported_hoks() {
 
     let output =
         cmd(&binary_path, "scaffold", &tree_path, &["-l", "noir", "-m"]);
-    let actual = String::from_utf8(output.stdout).unwrap();
+    let actual = normalize_newlines(&String::from_utf8(output.stdout).unwrap());
 
     // Verify the full expected output matches
     let noir_filename = tests_path.join("hoisted_hook_skip_modifiers_test.nr");
-    let expected = fs::read_to_string(noir_filename).unwrap();
+    let expected =
+        normalize_newlines(&fs::read_to_string(noir_filename).unwrap());
     assert_eq!(expected.trim(), actual.trim());
 }
