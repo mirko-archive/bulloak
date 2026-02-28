@@ -18,7 +18,11 @@ use clap::Parser;
 use owo_colors::OwoColorize;
 use serde::{Deserialize, Serialize};
 
-use crate::{cli::Cli, glob::expand_glob};
+use crate::{
+    backend::{BackendKind, NoirBackend},
+    cli::Cli,
+    glob::expand_glob,
+};
 
 /// Check that the tests match the spec.
 #[doc(hidden)]
@@ -49,6 +53,9 @@ pub struct Check {
     /// Whether to capitalize and punctuate branch descriptions.
     #[arg(long = "format-descriptions", default_value_t = false)]
     pub format_descriptions: bool,
+    /// The target language for checking.
+    #[arg(short = 'l', long = "lang", value_enum, default_value_t = BackendKind::Solidity)]
+    pub backend_kind: BackendKind,
 }
 
 impl Default for Check {
@@ -75,6 +82,10 @@ impl Check {
             }
         }
 
+        if let BackendKind::Noir = self.backend_kind {
+            return self.run_noir_check(specs, cfg);
+        }
+
         let mut violations = Vec::new();
         let ctxs: Vec<Context> = specs
             .iter()
@@ -90,7 +101,9 @@ impl Check {
                 violations.append(&mut rules::StructuralMatcher::check(&ctx));
             }
 
-            return exit(&violations);
+            let fixable_count =
+                violations.iter().filter(|v| v.is_fixable()).count();
+            return exit(&violations, fixable_count);
         }
 
         let mut fixed_count = 0;
@@ -171,9 +184,21 @@ impl Check {
             eprintln!("{}: {e}", "warn".yellow());
         }
     }
+
+    fn run_noir_check(&self, specs: Vec<PathBuf>, cfg: &Cli) {
+        let backend = NoirBackend { config: cfg.into() };
+
+        let mut violations = Vec::new();
+        for spec in &specs {
+            violations.extend(backend.check(spec));
+        }
+        // TODO: it's currently hard-coded to zero because fixing is
+        // not yet implemented in the noir backend
+        exit(&violations, 0);
+    }
 }
 
-fn exit(violations: &[Violation]) {
+fn exit<V: std::fmt::Display>(violations: &[V], fixable_count: usize) {
     if violations.is_empty() {
         println!(
             "{}",
@@ -191,8 +216,6 @@ fn exit(violations: &[Violation]) {
             violations.len(),
             check_literal
         );
-        let fixable_count =
-            violations.iter().filter(|v| v.is_fixable()).count();
         if fixable_count > 0 {
             let fix_literal = pluralize(fixable_count, "fix", "fixes");
             eprintln!(
